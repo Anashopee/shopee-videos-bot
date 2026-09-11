@@ -33,22 +33,52 @@ async def webhook(request: Request):
     mensagem = update.get("message", {})
     chat = mensagem.get("chat", {})
     chat_id = chat.get("id")
-    texto = mensagem.get("text", "")
 
-    if chat_id:
+    if not chat_id:
+        return {"ok": True}
 
-        if "shopee.com.br" in texto or "shopee.com" in texto:
+    # Verifica se recebeu um vídeo
+    video = mensagem.get("video")
+
+    if video:
+        legenda = mensagem.get("caption", "")
+
+        if "shopee.com.br" in legenda or "shopee.com" in legenda:
             resposta = (
-                "🛒 Link da Shopee recebido!\n\n"
-                "🔗 Vou preparar esse produto para o próximo passo."
+                "🎬 Vídeo recebido!\n\n"
+                "🔗 Link da Shopee identificado.\n"
+                "✅ Vídeo pronto para o próximo passo."
             )
         else:
             resposta = (
-                "👋 Olá!\n\n"
-                "Envie um link de produto da Shopee "
-                "para eu começar a processar."
+                "🎬 Vídeo recebido!\n\n"
+                "⚠️ Não encontrei o link da Shopee na legenda.\n"
+                "Envie o vídeo com o link da Shopee na legenda."
             )
 
         enviar_mensagem(chat_id, resposta)
+        return {"ok": True}
+
+    # Verifica mensagens de texto
+    texto = mensagem.get("text", "")
+
+    if "shopee.com.br" in texto or "shopee.com" in texto:
+        resposta = (
+            "🛒 Link da Shopee recebido!\n\n"
+            "🔗 Agora você pode enviar o vídeo correspondente."
+        )
+    elif texto == "/start":
+        resposta = (
+            "👋 Olá!\n\n"
+            "🎬 Envie seus vídeos com o link da Shopee "
+            "na legenda."
+        )
+    else:
+        resposta = (
+            "📦 Envie um vídeo com o link da Shopee "
+            "na legenda."
+        )
+
+    enviar_mensagem(chat_id, resposta)
 
     return {"ok": True}
