@@ -33,11 +33,22 @@ async def webhook(request: Request):
     mensagem = update.get("message", {})
     chat = mensagem.get("chat", {})
     chat_id = chat.get("id")
+    texto = mensagem.get("text", "")
 
     if chat_id:
-        enviar_mensagem(
-            chat_id,
-            "✅ Recebi! Seu bot da Shopee está funcionando."
-        )
+
+        if "shopee.com.br" in texto or "shopee.com" in texto:
+            resposta = (
+                "🛒 Link da Shopee recebido!\n\n"
+                "🔗 Vou preparar esse produto para o próximo passo."
+            )
+        else:
+            resposta = (
+                "👋 Olá!\n\n"
+                "Envie um link de produto da Shopee "
+                "para eu começar a processar."
+            )
+
+        enviar_mensagem(chat_id, resposta)
 
     return {"ok": True}
