@@ -1,7 +1,9 @@
 import os
 import json
 import urllib.request
-from http.server import BaseHTTPRequestHandler
+from fastapi import FastAPI, Request
+
+app = FastAPI()
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 
@@ -24,33 +26,18 @@ def enviar_mensagem(chat_id, texto):
     urllib.request.urlopen(requisicao)
 
 
-class handler(BaseHTTPRequestHandler):
+@app.post("/api/webhook")
+async def webhook(request: Request):
+    update = await request.json()
 
-    def do_POST(self):
-        tamanho = int(self.headers.get("content-length", 0))
-        corpo = self.rfile.read(tamanho)
+    mensagem = update.get("message", {})
+    chat = mensagem.get("chat", {})
+    chat_id = chat.get("id")
 
-        try:
-            update = json.loads(corpo)
+    if chat_id:
+        enviar_mensagem(
+            chat_id,
+            "✅ Recebi! Seu bot da Shopee está funcionando."
+        )
 
-            mensagem = update.get("message", {})
-            chat = mensagem.get("chat", {})
-            chat_id = chat.get("id")
-
-            if chat_id:
-                enviar_mensagem(
-                    chat_id,
-                    "✅ Recebi! Seu bot da Shopee está funcionando."
-                )
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"ok":true}')
-
-        except Exception as erro:
-            print(erro)
-
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b'{"ok":false}')
+    return {"ok": True}
