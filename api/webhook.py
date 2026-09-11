@@ -28,7 +28,10 @@ def enviar_mensagem(chat_id, texto):
 
 @app.post("/api/webhook")
 async def webhook(request: Request):
-    update = await request.json()
+    try:
+        update = await request.json()
+    except Exception:
+        return {"ok": True, "message": "Webhook ativo"}
 
     mensagem = update.get("message", {})
     chat = mensagem.get("chat", {})
