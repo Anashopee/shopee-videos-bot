@@ -1,15 +1,11 @@
 import os
 import json
 import urllib.request
-from pathlib import Path
 from fastapi import FastAPI, Request
 
 app = FastAPI()
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-
-INPUT_DIR = Path("input")
-INPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def enviar_mensagem(chat_id, texto):
@@ -31,7 +27,6 @@ def enviar_mensagem(chat_id, texto):
 
 
 def baixar_video(file_id, nome_arquivo):
-    # Descobre onde o Telegram armazenou o vídeo
     url_info = (
         f"https://api.telegram.org/bot{TOKEN}/getFile"
         f"?file_id={file_id}"
@@ -42,16 +37,23 @@ def baixar_video(file_id, nome_arquivo):
 
     file_path = dados["result"]["file_path"]
 
-    # Baixa o vídeo
     url_video = (
         f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
     )
 
-    destino = INPUT_DIR / nome_arquivo
+    destino = f"/tmp/{nome_arquivo}"
 
     urllib.request.urlretrieve(url_video, destino)
 
-    return str(destino)
+    return destino
+
+
+@app.get("/api/webhook")
+async def teste():
+    return {
+        "ok": True,
+        "message": "Webhook ativo"
+    }
 
 
 @app.post("/api/webhook")
@@ -59,7 +61,7 @@ async def webhook(request: Request):
     try:
         update = await request.json()
     except Exception:
-        return {"ok": True, "message": "Webhook ativo"}
+        return {"ok": True}
 
     mensagem = update.get("message", {})
     chat = mensagem.get("chat", {})
@@ -68,7 +70,6 @@ async def webhook(request: Request):
     if not chat_id:
         return {"ok": True}
 
-    # Recebe vídeo
     video = mensagem.get("video")
 
     if video:
@@ -89,7 +90,7 @@ async def webhook(request: Request):
                     "🎬 Vídeo recebido!\n\n"
                     "🔗 Link da Shopee identificado.\n"
                     "⬇️ Vídeo baixado com sucesso.\n"
-                    "✅ Pronto para o processamento."
+                    "✅ Pronto para o próximo passo."
                 )
             else:
                 resposta = (
@@ -108,7 +109,6 @@ async def webhook(request: Request):
         enviar_mensagem(chat_id, resposta)
         return {"ok": True}
 
-    # Recebe mensagem de texto
     texto = mensagem.get("text", "")
 
     if "shopee.com.br" in texto or "shopee.com" in texto:
