@@ -1,15 +1,14 @@
 import os
 import json
 import urllib.request
-from pathlib import Path
 from fastapi import FastAPI, Request
-
 
 app = FastAPI()
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SECRET_KEY = os.environ["SUPABASE_SECRET_KEY"]
+
 
 def enviar_mensagem(chat_id, texto):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -22,7 +21,9 @@ def enviar_mensagem(chat_id, texto):
     requisicao = urllib.request.Request(
         url,
         data=dados,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json"
+        },
         method="POST"
     )
 
@@ -36,7 +37,9 @@ def baixar_video(file_id, nome_arquivo):
     )
 
     with urllib.request.urlopen(url_info) as resposta:
-        dados = json.loads(resposta.read().decode("utf-8"))
+        dados = json.loads(
+            resposta.read().decode("utf-8")
+        )
 
     file_path = dados["result"]["file_path"]
 
@@ -46,9 +49,11 @@ def baixar_video(file_id, nome_arquivo):
 
     destino = f"/tmp/{nome_arquivo}"
 
-    urllib.request.urlretrieve(url_video, destino)
+    urllib.request.urlretrieve(
+        url_video,
+        destino
+    )
 
-    return destino
     return destino
 
 
@@ -68,16 +73,40 @@ def enviar_para_supabase(caminho_video, nome_arquivo):
             "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
             "apikey": SUPABASE_SECRET_KEY,
             "Content-Type": "video/mp4",
-            "x-upsert": "true",
+            "x-upsert": "true"
         },
-        method="POST",
+        method="POST"
     )
 
     with urllib.request.urlopen(requisicao) as resposta:
         return resposta.read().decode("utf-8")
 
 
-@app.get("/api/webhook")
+def criar_fila(chat_id, file_id, shopee_link):
+    url = f"{SUPABASE_URL}/rest/v1/videos_lote"
+
+    dados = json.dumps({
+        "chat_id": chat_id,
+        "telegram_file_id": file_id,
+        "shopee_link": shopee_link,
+        "status": "recebido"
+    }).encode("utf-8")
+
+    requisicao = urllib.request.Request(
+        url,
+        data=dados,
+        headers={
+            "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
+            "apikey": SUPABASE_SECRET_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        },
+        method="POST"
+    )
+
+    with urllib.request.urlopen(requisicao) as resposta:
+        return resposta.read().decode("utf-8")
+
 
 @app.get("/api/webhook")
 async def teste():
@@ -89,6 +118,7 @@ async def teste():
 
 @app.post("/api/webhook")
 async def webhook(request: Request):
+
     try:
         update = await request.json()
     except Exception:
@@ -104,67 +134,106 @@ async def webhook(request: Request):
     video = mensagem.get("video")
 
     if video:
+
         legenda = mensagem.get("caption", "")
 
         try:
             file_id = video["file_id"]
 
-            nome_arquivo = f"telegram_{file_id}.mp4"
+            nome_arquivo = (
+                f"telegram_{file_id}.mp4"
+            )
 
             caminho_video = baixar_video(
                 file_id,
                 nome_arquivo
             )
 
-            # Processa o vídeo automaticamente
-                        
-            if "shopee.com.br" in legenda or "shopee.com" in legenda:
+            nome_storage = (
+                f"{file_id}.mp4"
+            )
+
+            enviar_para_supabase(
+                caminho_video,
+                nome_storage
+            )
+
+            shopee_link = ""
+
+            if "shopee.com.br" in legenda:
+                inicio = legenda.find("https://shopee.com.br")
+                shopee_link = legenda[inicio:].split()[0]
+
+            elif "shopee.com" in legenda:
+                inicio = legenda.find("https://shopee.com")
+                shopee_link = legenda[inicio:].split()[0]
+
+            criar_fila(
+                chat_id,
+                file_id,
+                shopee_link
+            )
+
+            if shopee_link:
+
                 resposta = (
                     "🎬 Vídeo recebido!\n\n"
                     "🔗 Link da Shopee identificado.\n"
-                    "⬇️ Vídeo baixado.\n"
-                    "⚙️ Vídeo processado automaticamente.\n"
-                    "✅ Pronto para o próximo passo!"
+                    "☁️ Vídeo enviado para o Supabase.\n"
+                    "📋 Vídeo colocado na fila.\n"
+                    "💻 Pronto para o computador pegar."
                 )
+
             else:
+
                 resposta = (
                     "🎬 Vídeo recebido!\n\n"
-                    "⬇️ Vídeo baixado.\n"
-                    "⚙️ Vídeo processado automaticamente.\n"
+                    "☁️ Vídeo enviado para o Supabase.\n"
                     "⚠️ Não encontrei o link da Shopee.\n\n"
                     "Envie o link junto com o vídeo."
                 )
 
         except Exception as erro:
+
             resposta = (
-                "❌ Ocorreu um erro ao processar o vídeo.\n\n"
+                "❌ Ocorreu um erro.\n\n"
                 f"Erro: {erro}"
             )
 
-        enviar_mensagem(chat_id, resposta)
+        enviar_mensagem(
+            chat_id,
+            resposta
+        )
+
         return {"ok": True}
 
     texto = mensagem.get("text", "")
 
     if "shopee.com.br" in texto or "shopee.com" in texto:
+
         resposta = (
             "🛒 Link da Shopee recebido!\n\n"
             "🎬 Agora envie o vídeo correspondente."
         )
 
     elif texto == "/start":
+
         resposta = (
             "👋 Olá!\n\n"
-            "🎬 Envie seus vídeos com o link da Shopee "
+            "🎬 Envie um vídeo com o link da Shopee "
             "na legenda."
         )
 
     else:
+
         resposta = (
             "📦 Envie um vídeo com o link da Shopee "
             "na legenda."
         )
 
-    enviar_mensagem(chat_id, resposta)
+    enviar_mensagem(
+        chat_id,
+        resposta
+    )
 
     return {"ok": True}
