@@ -4,7 +4,6 @@ import urllib.request
 from pathlib import Path
 from fastapi import FastAPI, Request
 
-from worker.video_processor import process_video
 
 app = FastAPI()
 
