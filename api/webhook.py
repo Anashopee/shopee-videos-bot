@@ -8,7 +8,8 @@ from fastapi import FastAPI, Request
 app = FastAPI()
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_SECRET_KEY = os.environ["SUPABASE_SECRET_KEY"]
 
 def enviar_mensagem(chat_id, texto):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -48,7 +49,35 @@ def baixar_video(file_id, nome_arquivo):
     urllib.request.urlretrieve(url_video, destino)
 
     return destino
+    return destino
 
+
+def enviar_para_supabase(caminho_video, nome_arquivo):
+    url = (
+        f"{SUPABASE_URL}/storage/v1/object/videos/"
+        f"{nome_arquivo}"
+    )
+
+    with open(caminho_video, "rb") as arquivo:
+        dados = arquivo.read()
+
+    requisicao = urllib.request.Request(
+        url,
+        data=dados,
+        headers={
+            "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
+            "apikey": SUPABASE_SECRET_KEY,
+            "Content-Type": "video/mp4",
+            "x-upsert": "true",
+        },
+        method="POST",
+    )
+
+    with urllib.request.urlopen(requisicao) as resposta:
+        return resposta.read().decode("utf-8")
+
+
+@app.get("/api/webhook")
 
 @app.get("/api/webhook")
 async def teste():
