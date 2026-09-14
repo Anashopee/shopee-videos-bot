@@ -1,7 +1,10 @@
 import os
 import json
 import urllib.request
+from pathlib import Path
 from fastapi import FastAPI, Request
+
+from worker.video_processor import process_video
 
 app = FastAPI()
 
@@ -80,29 +83,41 @@ async def webhook(request: Request):
 
             nome_arquivo = f"telegram_{file_id}.mp4"
 
-            caminho = baixar_video(
+            caminho_video = baixar_video(
                 file_id,
                 nome_arquivo
+            )
+
+            # Processa o vídeo automaticamente
+            nome_processado = f"processado_{file_id}.mp4"
+
+            caminho_processado = f"/tmp/{nome_processado}"
+
+            process_video(
+                caminho_video,
+                caminho_processado
             )
 
             if "shopee.com.br" in legenda or "shopee.com" in legenda:
                 resposta = (
                     "🎬 Vídeo recebido!\n\n"
                     "🔗 Link da Shopee identificado.\n"
-                    "⬇️ Vídeo baixado com sucesso.\n"
-                    "✅ Pronto para o próximo passo."
+                    "⬇️ Vídeo baixado.\n"
+                    "⚙️ Vídeo processado automaticamente.\n"
+                    "✅ Pronto para o próximo passo!"
                 )
             else:
                 resposta = (
                     "🎬 Vídeo recebido!\n\n"
-                    "⬇️ Vídeo baixado com sucesso.\n"
-                    "⚠️ Não encontrei o link da Shopee na legenda.\n\n"
+                    "⬇️ Vídeo baixado.\n"
+                    "⚙️ Vídeo processado automaticamente.\n"
+                    "⚠️ Não encontrei o link da Shopee.\n\n"
                     "Envie o link junto com o vídeo."
                 )
 
         except Exception as erro:
             resposta = (
-                "❌ Não consegui baixar o vídeo.\n\n"
+                "❌ Ocorreu um erro ao processar o vídeo.\n\n"
                 f"Erro: {erro}"
             )
 
@@ -120,7 +135,7 @@ async def webhook(request: Request):
     elif texto == "/start":
         resposta = (
             "👋 Olá!\n\n"
-            "🎬 Envie o vídeo com o link da Shopee "
+            "🎬 Envie seus vídeos com o link da Shopee "
             "na legenda."
         )
 
