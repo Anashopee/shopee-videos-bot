@@ -88,15 +88,7 @@ async def webhook(request: Request):
             )
 
             # Processa o vídeo automaticamente
-            nome_processado = f"processado_{file_id}.mp4"
-
-            caminho_processado = f"/tmp/{nome_processado}"
-
-            process_video(
-                caminho_video,
-                caminho_processado
-            )
-
+                        
             if "shopee.com.br" in legenda or "shopee.com" in legenda:
                 resposta = (
                     "🎬 Vídeo recebido!\n\n"
