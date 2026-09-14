@@ -1,9 +1,12 @@
 import os
 import json
 import urllib.request
+
 from fastapi import FastAPI, Request
 
+
 app = FastAPI()
+
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -47,28 +50,21 @@ def baixar_video(file_id, nome_arquivo):
         f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
     )
 
-    destino = f"/tmp/{nome_arquivo}"
+    with urllib.request.urlopen(url_video) as resposta:
+        video_bytes = resposta.read()
 
-    urllib.request.urlretrieve(
-        url_video,
-        destino
-    )
-
-    return destino
+    return video_bytes
 
 
-def enviar_para_supabase(caminho_video, nome_arquivo):
+def enviar_para_supabase(video_bytes, nome_arquivo):
     url = (
         f"{SUPABASE_URL}/storage/v1/object/videos/"
         f"{nome_arquivo}"
     )
 
-    with open(caminho_video, "rb") as arquivo:
-        dados = arquivo.read()
-
     requisicao = urllib.request.Request(
         url,
-        data=dados,
+        data=video_bytes,
         headers={
             "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
             "apikey": SUPABASE_SECRET_KEY,
@@ -121,11 +117,14 @@ async def webhook(request: Request):
 
     try:
         update = await request.json()
+
     except Exception:
         return {"ok": True}
 
     mensagem = update.get("message", {})
+
     chat = mensagem.get("chat", {})
+
     chat_id = chat.get("id")
 
     if not chat_id:
@@ -144,7 +143,7 @@ async def webhook(request: Request):
                 f"telegram_{file_id}.mp4"
             )
 
-            caminho_video = baixar_video(
+            video_bytes = baixar_video(
                 file_id,
                 nome_arquivo
             )
@@ -154,19 +153,31 @@ async def webhook(request: Request):
             )
 
             enviar_para_supabase(
-                caminho_video,
+                video_bytes,
                 nome_storage
             )
 
             shopee_link = ""
 
             if "shopee.com.br" in legenda:
-                inicio = legenda.find("https://shopee.com.br")
-                shopee_link = legenda[inicio:].split()[0]
+
+                inicio = legenda.find(
+                    "https://shopee.com.br"
+                )
+
+                shopee_link = legenda[
+                    inicio:
+                ].split()[0]
 
             elif "shopee.com" in legenda:
-                inicio = legenda.find("https://shopee.com")
-                shopee_link = legenda[inicio:].split()[0]
+
+                inicio = legenda.find(
+                    "https://shopee.com"
+                )
+
+                shopee_link = legenda[
+                    inicio:
+                ].split()[0]
 
             criar_fila(
                 chat_id,
@@ -209,7 +220,10 @@ async def webhook(request: Request):
 
     texto = mensagem.get("text", "")
 
-    if "shopee.com.br" in texto or "shopee.com" in texto:
+    if (
+        "shopee.com.br" in texto
+        or "shopee.com" in texto
+    ):
 
         resposta = (
             "🛒 Link da Shopee recebido!\n\n"
