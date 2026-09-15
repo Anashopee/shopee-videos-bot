@@ -1,6 +1,7 @@
 import os
 import json
 import urllib.request
+import requests
 
 from fastapi import FastAPI, Request
 
@@ -33,7 +34,7 @@ def enviar_mensagem(chat_id, texto):
     urllib.request.urlopen(requisicao)
 
 
-def baixar_video(file_id, nome_arquivo):
+def baixar_video(file_id):
     url_info = (
         f"https://api.telegram.org/bot{TOKEN}/getFile"
         f"?file_id={file_id}"
@@ -62,46 +63,52 @@ def enviar_para_supabase(video_bytes, nome_arquivo):
         f"{nome_arquivo}"
     )
 
-    requisicao = urllib.request.Request(
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
+        "apikey": SUPABASE_SECRET_KEY,
+        "Content-Type": "video/mp4",
+        "x-upsert": "true"
+    }
+
+    resposta = requests.post(
         url,
         data=video_bytes,
-        headers={
-            "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
-            "apikey": SUPABASE_SECRET_KEY,
-            "Content-Type": "video/mp4",
-            "x-upsert": "true"
-        },
-        method="POST"
+        headers=headers,
+        timeout=120
     )
 
-    with urllib.request.urlopen(requisicao) as resposta:
-        return resposta.read().decode("utf-8")
+    resposta.raise_for_status()
+
+    return resposta.text
 
 
 def criar_fila(chat_id, file_id, shopee_link):
     url = f"{SUPABASE_URL}/rest/v1/videos_lote"
 
-    dados = json.dumps({
+    dados = {
         "chat_id": chat_id,
         "telegram_file_id": file_id,
         "shopee_link": shopee_link,
         "status": "recebido"
-    }).encode("utf-8")
+    }
 
-    requisicao = urllib.request.Request(
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
+        "apikey": SUPABASE_SECRET_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+    }
+
+    resposta = requests.post(
         url,
-        data=dados,
-        headers={
-            "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
-            "apikey": SUPABASE_SECRET_KEY,
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
-        },
-        method="POST"
+        json=dados,
+        headers=headers,
+        timeout=30
     )
 
-    with urllib.request.urlopen(requisicao) as resposta:
-        return resposta.read().decode("utf-8")
+    resposta.raise_for_status()
+
+    return resposta.text
 
 
 @app.get("/api/webhook")
@@ -116,6 +123,7 @@ async def teste():
 async def webhook(request: Request):
 
     etapa = "recebendo a mensagem"
+    chat_id = None
 
     try:
         update = await request.json()
@@ -136,20 +144,11 @@ async def webhook(request: Request):
 
             file_id = video["file_id"]
 
-            nome_arquivo = (
-                f"telegram_{file_id}.mp4"
-            )
-
             etapa = "baixando o vídeo do Telegram"
 
-            video_bytes = baixar_video(
-                file_id,
-                nome_arquivo
-            )
+            video_bytes = baixar_video(file_id)
 
-            nome_storage = (
-                f"{file_id}.mp4"
-            )
+            nome_storage = f"{file_id}.mp4"
 
             etapa = "enviando o vídeo para o Supabase"
 

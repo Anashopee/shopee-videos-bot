@@ -1,2 +1,4 @@
-fastapi>=0.141.1
-supabase>=2.0.0
+fastapi
+uvicorn
+requests
+imageio-ffmpeg
