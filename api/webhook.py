@@ -115,33 +115,32 @@ async def teste():
 @app.post("/api/webhook")
 async def webhook(request: Request):
 
+    etapa = "recebendo a mensagem"
+
     try:
         update = await request.json()
 
-    except Exception:
-        return {"ok": True}
+        mensagem = update.get("message", {})
 
-    mensagem = update.get("message", {})
+        chat = mensagem.get("chat", {})
+        chat_id = chat.get("id")
 
-    chat = mensagem.get("chat", {})
+        if not chat_id:
+            return {"ok": True}
 
-    chat_id = chat.get("id")
+        video = mensagem.get("video")
 
-    if not chat_id:
-        return {"ok": True}
+        if video:
 
-    video = mensagem.get("video")
+            legenda = mensagem.get("caption", "")
 
-    if video:
-
-        legenda = mensagem.get("caption", "")
-
-        try:
             file_id = video["file_id"]
 
             nome_arquivo = (
                 f"telegram_{file_id}.mp4"
             )
+
+            etapa = "baixando o vídeo do Telegram"
 
             video_bytes = baixar_video(
                 file_id,
@@ -151,6 +150,8 @@ async def webhook(request: Request):
             nome_storage = (
                 f"{file_id}.mp4"
             )
+
+            etapa = "enviando o vídeo para o Supabase"
 
             enviar_para_supabase(
                 video_bytes,
@@ -179,11 +180,15 @@ async def webhook(request: Request):
                     inicio:
                 ].split()[0]
 
+            etapa = "criando a fila no Supabase"
+
             criar_fila(
                 chat_id,
                 file_id,
                 shopee_link
             )
+
+            etapa = "enviando confirmação"
 
             if shopee_link:
 
@@ -204,11 +209,38 @@ async def webhook(request: Request):
                     "Envie o link junto com o vídeo."
                 )
 
-        except Exception as erro:
+            enviar_mensagem(
+                chat_id,
+                resposta
+            )
+
+            return {"ok": True}
+
+        texto = mensagem.get("text", "")
+
+        if (
+            "shopee.com.br" in texto
+            or "shopee.com" in texto
+        ):
 
             resposta = (
-                "❌ Ocorreu um erro.\n\n"
-                f"Erro: {erro}"
+                "🛒 Link da Shopee recebido!\n\n"
+                "🎬 Agora envie o vídeo correspondente."
+            )
+
+        elif texto == "/start":
+
+            resposta = (
+                "👋 Olá!\n\n"
+                "🎬 Envie um vídeo com o link da Shopee "
+                "na legenda."
+            )
+
+        else:
+
+            resposta = (
+                "📦 Envie um vídeo com o link da Shopee "
+                "na legenda."
             )
 
         enviar_mensagem(
@@ -218,36 +250,19 @@ async def webhook(request: Request):
 
         return {"ok": True}
 
-    texto = mensagem.get("text", "")
+    except Exception as erro:
 
-    if (
-        "shopee.com.br" in texto
-        or "shopee.com" in texto
-    ):
+        try:
+            if chat_id:
+                enviar_mensagem(
+                    chat_id,
+                    (
+                        "❌ Ocorreu um erro.\n\n"
+                        f"📍 Etapa: {etapa}\n"
+                        f"⚠️ Erro: {erro}"
+                    )
+                )
+        except Exception:
+            pass
 
-        resposta = (
-            "🛒 Link da Shopee recebido!\n\n"
-            "🎬 Agora envie o vídeo correspondente."
-        )
-
-    elif texto == "/start":
-
-        resposta = (
-            "👋 Olá!\n\n"
-            "🎬 Envie um vídeo com o link da Shopee "
-            "na legenda."
-        )
-
-    else:
-
-        resposta = (
-            "📦 Envie um vídeo com o link da Shopee "
-            "na legenda."
-        )
-
-    enviar_mensagem(
-        chat_id,
-        resposta
-    )
-
-    return {"ok": True}
+        return {"ok": True}
