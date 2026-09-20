@@ -1,18 +1,30 @@
 import os
 import json
+import re
 import urllib.request
-import requests
 
+import requests
 from fastapi import FastAPI, Request
 
 
 app = FastAPI()
 
 
+# ============================================================
+# CONFIGURAÇÕES
+# ============================================================
+
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-SUPABASE_URL = os.environ["SUPABASE_URL"]
+
+# Remove uma possível / no final para evitar URLs duplicadas
+SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
+
 SUPABASE_SECRET_KEY = os.environ["SUPABASE_SECRET_KEY"]
 
+
+# ============================================================
+# TELEGRAM
+# ============================================================
 
 def enviar_mensagem(chat_id, texto):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -31,8 +43,13 @@ def enviar_mensagem(chat_id, texto):
         method="POST"
     )
 
-    urllib.request.urlopen(requisicao)
+    with urllib.request.urlopen(requisicao) as resposta:
+        resposta.read()
 
+
+# ============================================================
+# BAIXAR VÍDEO DO TELEGRAM
+# ============================================================
 
 def baixar_video(file_id):
     url_info = (
@@ -56,6 +73,10 @@ def baixar_video(file_id):
 
     return video_bytes
 
+
+# ============================================================
+# ENVIAR VÍDEO PARA O SUPABASE STORAGE
+# ============================================================
 
 def enviar_para_supabase(video_bytes, nome_arquivo):
     url = (
@@ -81,6 +102,10 @@ def enviar_para_supabase(video_bytes, nome_arquivo):
 
     return resposta.text
 
+
+# ============================================================
+# CRIAR ITEM NA FILA
+# ============================================================
 
 def criar_fila(chat_id, file_id, shopee_link):
     url = f"{SUPABASE_URL}/rest/v1/videos_lote"
@@ -111,6 +136,51 @@ def criar_fila(chat_id, file_id, shopee_link):
     return resposta.text
 
 
+# ============================================================
+# IDENTIFICAR LINK DA SHOPEE
+# ============================================================
+
+def encontrar_link_shopee(texto):
+    """
+    Procura links da Shopee dentro de um texto.
+
+    Aceita, por exemplo:
+
+    https://s.shopee.com.br/xxxxx
+    https://shopee.com.br/xxxxx
+    https://www.shopee.com.br/xxxxx
+    https://shopee.com/xxxxx
+    https://www.shopee.com/xxxxx
+    """
+
+    if not texto:
+        return ""
+
+    padrao = re.compile(
+        r'https?://(?:www\.)?'
+        r'(?:s\.shopee\.com\.br|shopee\.com\.br|shopee\.com)'
+        r'[^\s<>"\']+',
+        re.IGNORECASE
+    )
+
+    resultado = padrao.search(texto)
+
+    if not resultado:
+        return ""
+
+    link = resultado.group(0)
+
+    # Remove pontuação que possa ter sido colocada
+    # imediatamente depois do link na legenda.
+    link = link.rstrip(".,;:!?)]}")
+
+    return link
+
+
+# ============================================================
+# TESTE DO WEBHOOK
+# ============================================================
+
 @app.get("/api/webhook")
 async def teste():
     return {
@@ -118,6 +188,10 @@ async def teste():
         "message": "Webhook ativo"
     }
 
+
+# ============================================================
+# WEBHOOK PRINCIPAL
+# ============================================================
 
 @app.post("/api/webhook")
 async def webhook(request: Request):
@@ -135,6 +209,10 @@ async def webhook(request: Request):
 
         if not chat_id:
             return {"ok": True}
+
+        # ====================================================
+        # RECEBE VÍDEO
+        # ====================================================
 
         video = mensagem.get("video")
 
@@ -157,27 +235,17 @@ async def webhook(request: Request):
                 nome_storage
             )
 
-            shopee_link = ""
+            # =================================================
+            # ENCONTRAR LINK DA SHOPEE
+            # =================================================
 
-            if "shopee.com.br" in legenda:
+            shopee_link = encontrar_link_shopee(
+                legenda
+            )
 
-                inicio = legenda.find(
-                    "https://shopee.com.br"
-                )
-
-                shopee_link = legenda[
-                    inicio:
-                ].split()[0]
-
-            elif "shopee.com" in legenda:
-
-                inicio = legenda.find(
-                    "https://shopee.com"
-                )
-
-                shopee_link = legenda[
-                    inicio:
-                ].split()[0]
+            # =================================================
+            # CRIAR FILA
+            # =================================================
 
             etapa = "criando a fila no Supabase"
 
@@ -186,6 +254,10 @@ async def webhook(request: Request):
                 file_id,
                 shopee_link
             )
+
+            # =================================================
+            # RESPOSTA PARA O TELEGRAM
+            # =================================================
 
             etapa = "enviando confirmação"
 
@@ -215,12 +287,13 @@ async def webhook(request: Request):
 
             return {"ok": True}
 
+        # ====================================================
+        # RECEBE TEXTO
+        # ====================================================
+
         texto = mensagem.get("text", "")
 
-        if (
-            "shopee.com.br" in texto
-            or "shopee.com" in texto
-        ):
+        if encontrar_link_shopee(texto):
 
             resposta = (
                 "🛒 Link da Shopee recebido!\n\n"
@@ -249,10 +322,16 @@ async def webhook(request: Request):
 
         return {"ok": True}
 
+    # ========================================================
+    # ERRO
+    # ========================================================
+
     except Exception as erro:
 
         try:
+
             if chat_id:
+
                 enviar_mensagem(
                     chat_id,
                     (
@@ -261,6 +340,7 @@ async def webhook(request: Request):
                         f"⚠️ Erro: {erro}"
                     )
                 )
+
         except Exception:
             pass
 
